@@ -66,7 +66,7 @@ http://localhost:8081
 - **System**: `MySQL`
 - **Server**: `db` (pre-filled)
 - **Username**: `taskflow`
-- **Password**: `taskflowpass123`
+- **Password**: *(The `MYSQL_PASSWORD` you set in your `.env`)*
 - **Database**: `taskflow`
 
 Provides a Supabase-like visual dashboard to inspect tables, view rows, and edit data directly in your browser.
@@ -111,6 +111,7 @@ ROOT_ARCHITECT_EMAIL=your_email@example.com
 JWT_SECRET=your_jwt_secret_random_hex_string_here
 FRONTEND_PORT=80
 BACKEND_PORT=5000
+DB_UI_PORT=8081
 EOF
 ```
 
@@ -132,7 +133,8 @@ curl http://localhost/api/health
 
 ### Connect directly to MySQL inside the container:
 ```bash
-docker exec -it taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow
+# Prompts securely for password
+docker exec -it taskflow-mysql-db mysql -u taskflow -p taskflow
 ```
 
 ### Useful SQL Queries:

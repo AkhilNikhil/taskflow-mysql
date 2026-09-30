@@ -33,52 +33,53 @@
 
 ### 🔑 Credentials Reference
 
-| Component | Key / Field | Default Value | Description |
+| Component | Key / Field | Default / Configured In | Description |
 |---|---|---|---|
-| **Root Admin** | Email | `akhilbm13@gmail.com` | Automatically promoted to `ARCHITECT` upon registration |
+| **Root Admin** | Email | Set in `.env` (`ROOT_ARCHITECT_EMAIL`) | Automatically promoted to `ARCHITECT` upon registration |
 | **MySQL DB** | Hostname (internal) | `db` | Docker bridge network alias |
 | **MySQL DB** | Port | `3306` | Standard MySQL port |
 | **MySQL DB** | Database Name | `taskflow` | Application database |
 | **MySQL DB** | App User | `taskflow` | Main application user |
-| **MySQL DB** | App Password | `taskflowpass123` | Password for `taskflow` user |
-| **MySQL DB** | Root Password | `rootpassword123` | MySQL administrative password |
-| **Backend** | JWT Secret | `taskflow-super-secure-jwt-secret-key-2026` | Token signing key |
+| **MySQL DB** | App Password | Set in `.env` (`MYSQL_PASSWORD`) | Secure password for `taskflow` user |
+| **MySQL DB** | Root Password | Set in `.env` (`MYSQL_ROOT_PASSWORD`) | MySQL administrative password |
+| **Backend** | JWT Secret | Set in `.env` (`JWT_SECRET`) | Token signing key |
 
 ---
 
 ## 2. Live Data Inspection (MySQL Queries & One-Liners)
 
-> 💡 Run these commands from your EC2 or local terminal to inspect what is happening inside the database in real time as you create users, teams, and tasks!
+> 💡 Run these commands from your EC2 or local terminal to inspect what is happening inside the database in real time.  
+> Replace `<YOUR_DB_PASSWORD>` with the `MYSQL_PASSWORD` configured in your `.env` file (or omit `-p...` to be prompted securely).
 
 ### ⚡ Quick One-Liner Inspections (Run directly in terminal)
 
 #### 1. View all Registered Users & their System Roles
 ```bash
-docker exec -it taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow -e \
+docker exec -it taskflow-mysql-db mysql -u taskflow -p<YOUR_DB_PASSWORD> taskflow -e \
   "SELECT id, email, display_name, system_role, account_status, created_at FROM users ORDER BY created_at DESC;"
 ```
 
 #### 2. View all Teams Created
 ```bash
-docker exec -it taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow -e \
+docker exec -it taskflow-mysql-db mysql -u taskflow -p<YOUR_DB_PASSWORD> taskflow -e \
   "SELECT t.id, t.name, t.description, u.email AS created_by_email, t.created_at FROM teams t LEFT JOIN users u ON t.created_by = u.id ORDER BY t.created_at DESC;"
 ```
 
 #### 3. View Team Memberships (Who belongs to which team)
 ```bash
-docker exec -it taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow -e \
+docker exec -it taskflow-mysql-db mysql -u taskflow -p<YOUR_DB_PASSWORD> taskflow -e \
   "SELECT tm.id AS membership_id, t.name AS team_name, u.email AS member_email, tm.team_role, tm.joined_at FROM team_members tm JOIN teams t ON tm.team_id = t.id JOIN users u ON tm.user_id = u.id ORDER BY t.name, tm.joined_at;"
 ```
 
 #### 4. View all Tasks & Assignments
 ```bash
-docker exec -it taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow -e \
+docker exec -it taskflow-mysql-db mysql -u taskflow -p<YOUR_DB_PASSWORD> taskflow -e \
   "SELECT t.id, t.title, t.priority, t.status, COALESCE(tm.name, 'Personal') AS scope, COALESCE(u.email, 'Unassigned') AS assigned_to, creator.email AS created_by FROM tasks t LEFT JOIN teams tm ON t.assigned_team_id = tm.id LEFT JOIN users u ON t.assigned_user_id = u.id LEFT JOIN users creator ON t.created_by = creator.id ORDER BY t.created_at DESC;"
 ```
 
 #### 5. Quick Table Counts (Summary)
 ```bash
-docker exec -it taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow -e \
+docker exec -it taskflow-mysql-db mysql -u taskflow -p<YOUR_DB_PASSWORD> taskflow -e \
   "SELECT (SELECT COUNT(*) FROM users) AS total_users, (SELECT COUNT(*) FROM teams) AS total_teams, (SELECT COUNT(*) FROM team_members) AS total_memberships, (SELECT COUNT(*) FROM tasks) AS total_tasks;"
 ```
 
@@ -86,14 +87,14 @@ docker exec -it taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow -
 
 ### 🖥️ Interactive MySQL Shell
 
-If you prefer an interactive SQL prompt:
+If you prefer an interactive SQL prompt (prompts securely for password):
 
 ```bash
-# Connect as app user
-docker exec -it taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow
+# Connect as app user (enter your MYSQL_PASSWORD when prompted)
+docker exec -it taskflow-mysql-db mysql -u taskflow -p taskflow
 
-# OR connect as root
-docker exec -it taskflow-mysql-db mysql -u root -prootpassword123 taskflow
+# OR connect as root (enter your MYSQL_ROOT_PASSWORD when prompted)
+docker exec -it taskflow-mysql-db mysql -u root -p taskflow
 ```
 
 Inside the MySQL prompt:
@@ -124,10 +125,10 @@ Keep an auto-updating live table on your screen that refreshes every 2 seconds w
 
 ```bash
 # Watch Users & Roles in real-time
-watch -n 2 "docker exec taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow -e 'SELECT email, system_role, account_status FROM users;'"
+watch -n 2 "docker exec taskflow-mysql-db mysql -u taskflow -p<YOUR_DB_PASSWORD> taskflow -e 'SELECT email, system_role, account_status FROM users;'"
 
 # Watch Tasks in real-time
-watch -n 2 "docker exec taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow -e 'SELECT title, status, priority, assigned_team_id, assigned_user_id FROM tasks ORDER BY created_at DESC LIMIT 10;'"
+watch -n 2 "docker exec taskflow-mysql-db mysql -u taskflow -p<YOUR_DB_PASSWORD> taskflow -e 'SELECT title, status, priority, assigned_team_id, assigned_user_id FROM tasks ORDER BY created_at DESC LIMIT 10;'"
 ```
 *(Press `Ctrl + C` to stop watching)*
 
@@ -138,7 +139,7 @@ watch -n 2 "docker exec taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 ta
 ### 👑 Workflow A: Promoting a User to ADMIN
 
 1. **Step 1: Architect Logs In**
-   - Log in with the root architect email: `akhilbm13@gmail.com`.
+   - Log in with the configured `ROOT_ARCHITECT_EMAIL`.
    - The top header will display the golden **ARCHITECT** badge and the **Admin Console** tab will appear.
 2. **Step 2: Change Role in Admin Console**
    - Click the **Admin Console** tab.
@@ -146,7 +147,7 @@ watch -n 2 "docker exec taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 ta
    - In the dropdown, change `USER` to `ADMIN`.
 3. **Step 3: Confirm in MySQL immediately**
    ```bash
-   docker exec -it taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow -e \
+   docker exec -it taskflow-mysql-db mysql -u taskflow -p<YOUR_DB_PASSWORD> taskflow -e \
      "SELECT email, system_role FROM users WHERE email='user_email@example.com';"
    ```
 4. **Step 4: The Promoted User MUST Re-Login (Important!)**
@@ -168,7 +169,7 @@ watch -n 2 "docker exec taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 ta
    - Select role (`MEMBER` or `LEADER`) and click **Add Member**.
    - Verify in MySQL:
      ```bash
-     docker exec -it taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow -e \
+     docker exec -it taskflow-mysql-db mysql -u taskflow -p<YOUR_DB_PASSWORD> taskflow -e \
        "SELECT t.name, u.email, tm.team_role FROM team_members tm JOIN teams t ON tm.team_id = t.id JOIN users u ON tm.user_id = u.id;"
      ```
 3. **Step 3: Create & Assign Task**
@@ -178,7 +179,7 @@ watch -n 2 "docker exec taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 ta
    - Click **+ Add Task**.
    - Verify in MySQL:
      ```bash
-     docker exec -it taskflow-mysql-db mysql -u taskflow -ptaskflowpass123 taskflow -e \
+     docker exec -it taskflow-mysql-db mysql -u taskflow -p<YOUR_DB_PASSWORD> taskflow -e \
        "SELECT t.title, tm.name AS team, u.email AS assigned_to FROM tasks t LEFT JOIN teams tm ON t.assigned_team_id = tm.id LEFT JOIN users u ON t.assigned_user_id = u.id;"
      ```
 
