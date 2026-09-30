@@ -56,8 +56,11 @@ services:
         condition: service_healthy
     environment:
       ADMINER_DEFAULT_SERVER: db
+    # SECURE PRODUCTION NOTE: Bound strictly to 127.0.0.1 (loopback interface).
+    # Keeps port 8081 inaccessible from public internet.
+    # Connect securely via SSH tunnel: ssh -L 8081:localhost:8081 ubuntu@<EC2-IP>
     ports:
-      - "${DB_UI_PORT:-8081}:8080"
+      - "127.0.0.1:${DB_UI_PORT:-8081}:8080"
 
 volumes:
   mysql_data:
