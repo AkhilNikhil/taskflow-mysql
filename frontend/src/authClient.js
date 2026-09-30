@@ -5,9 +5,20 @@ const listeners = new Set();
 
 function getStoredSession() {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
+    // 1. Check tab-isolated sessionStorage first.
+    // This ensures that multiple tabs logged into different accounts (e.g. Architect in Tab 1,
+    // regular User in Tab 2) keep their own identity and never turn into each other upon refresh.
+    const sessionRaw = window.sessionStorage.getItem(STORAGE_KEY);
+    if (sessionRaw) {
+      return JSON.parse(sessionRaw);
+    }
+    // 2. Fallback to localStorage if this tab has no session yet (e.g. initial window open)
+    const localRaw = window.localStorage.getItem(STORAGE_KEY);
+    if (localRaw) {
+      window.sessionStorage.setItem(STORAGE_KEY, localRaw);
+      return JSON.parse(localRaw);
+    }
+    return null;
   } catch {
     return null;
   }
@@ -16,12 +27,16 @@ function getStoredSession() {
 function setStoredSession(session) {
   try {
     if (session) {
+      // Store in this tab's isolated storage
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+      // Also write to localStorage for convenient single-tab persistence
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
     } else {
+      window.sessionStorage.removeItem(STORAGE_KEY);
       window.localStorage.removeItem(STORAGE_KEY);
     }
   } catch (e) {
-    console.error("Failed to update localStorage", e);
+    console.error("Failed to update auth storage", e);
   }
 }
 
