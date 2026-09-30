@@ -101,9 +101,9 @@ BACKEND_PORT=5000
 EOF
 ```
 
-### 5. Launch the Stack (Instant Docker Hub Pull)
+### 5. Launch the Stack
 ```bash
-docker compose -f docker-compose.hub.yml up -d
+docker compose up -d
 ```
 *(Alternatively, to build locally from source on the machine: `docker compose up -d --build`)*
 
@@ -133,13 +133,3 @@ SELECT id, name, active_status, created_at FROM teams;
 -- View tasks
 SELECT id, title, status, priority, owner_user_id FROM tasks;
 ```
-
----
-
-## 📋 Interview Demonstration Cheat Sheet
-1. **Explain the Motivation**:
-   - *"In earlier iterations, we relied on Supabase for Auth and PostgreSQL. While convenient for rapid prototyping, it tied our application to third-party cloud infrastructure, vendor rate limits, and external email deliverability."*
-2. **Explain the Solution**:
-   - *"We redesigned TaskFlow to be 100% self-hosted and cloud-agnostic. We implemented native JWT authentication with Werkzeug password hashing, migrated the database schema to MySQL 8.0, and containerized the entire solution with Docker Compose."*
-3. **Show the Resilience**:
-   - *"By using relative reverse-proxying via Nginx, our frontend has zero hardcoded IP addresses. Even if AWS assigns a new public IP to the EC2 instance upon restart, the application works seamlessly without requiring any rebuild or configuration update."*
