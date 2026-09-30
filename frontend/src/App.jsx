@@ -1176,6 +1176,7 @@ export default function App() {
               className="action-button"
               onClick={() => {
                 setSelectedTeamDetail(null);
+                loadTeams();
                 setShowTeamModal(true);
               }}
               style={{ minHeight: "40px", padding: "0 14px", fontWeight: "700" }}
@@ -1451,6 +1452,7 @@ export default function App() {
                 onClick={() => {
                   setActiveTab("my");
                   setSelectedFilterTeamId("");
+                  loadTasks();
                 }}
                 style={{
                   padding: "8px 16px",
@@ -1472,6 +1474,8 @@ export default function App() {
                 onClick={() => {
                   setActiveTab("teams");
                   setSelectedFilterTeamId("");
+                  loadTasks();
+                  loadTeams();
                 }}
                 style={{
                   padding: "8px 16px",
@@ -1494,6 +1498,8 @@ export default function App() {
                   onClick={() => {
                     setActiveTab("org");
                     setSelectedFilterTeamId("");
+                    loadTasks();
+                    loadTeams();
                   }}
                   style={{
                     padding: "8px 16px",
@@ -1517,6 +1523,8 @@ export default function App() {
                   onClick={() => {
                     setActiveTab("users");
                     setSelectedFilterTeamId("");
+                    loadTasks();
+                    loadWorkspaceUsers();
                     if (!selectedUserOverviewId && workspaceUsers.length > 0) {
                       setSelectedUserOverviewId(workspaceUsers[0].id);
                     }
