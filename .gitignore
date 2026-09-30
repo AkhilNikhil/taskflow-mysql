@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+*CREDENTIALS*
+*SECRET*
 
 # Python / Flask
 __pycache__/
