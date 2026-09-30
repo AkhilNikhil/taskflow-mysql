@@ -88,7 +88,7 @@ def list_teams():
     result = []
     for t in teams:
         td = t.to_dict()
-        td["my_role"] = role_by_team.get(t.id)
+        td["my_role"] = role_by_team.get(t.id) or (g.current_user.system_role if _is_privileged() else None)
         td["member_count"] = counts.get(t.id, 0)
         td["members"] = members_by_team.get(t.id, [])
         result.append(td)
@@ -108,7 +108,7 @@ def get_team(team_id):
         return jsonify({"message": "Forbidden: You are not a member of this team"}), 403
 
     team_data = team.to_dict()
-    team_data["my_role"] = membership.team_role if membership else None
+    team_data["my_role"] = membership.team_role if membership else (g.current_user.system_role if _is_privileged() else None)
     team_data["members"] = [
         {
             "id": str(m.id),

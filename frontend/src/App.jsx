@@ -56,8 +56,9 @@ export default function App() {
   const [newMemberRole, setNewMemberRole] = useState("MEMBER");
   const [isAddingMember, setIsAddingMember] = useState(false);
 
-  // Admin Panel state (Architect only)
+  // Admin & Architect Console state
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminModalTab, setAdminModalTab] = useState("users");
   const [adminUsers, setAdminUsers] = useState([]);
   const [isLoadingAdminUsers, setIsLoadingAdminUsers] = useState(false);
   const [isUpdatingUserRole, setIsUpdatingUserRole] = useState(false);
@@ -195,6 +196,20 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendStatus, session?.user?.id, userProfile, syncRetry]);
 
+  // Periodic background sync to keep roles, teams, and tasks updated across browser tabs
+  useEffect(() => {
+    if (!session || backendStatus !== "connected") return;
+    const interval = setInterval(() => {
+      syncProfile();
+    }, 12000);
+    const onFocus = () => syncProfile();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [session, backendStatus]);
+
   // ----------------------------------------------------
   // 2. AUTH SESSION MANAGEMENT
   // ----------------------------------------------------
@@ -239,7 +254,7 @@ export default function App() {
       setUserProfile(meData.user);
       setAppMessage(null);
       syncFailures.current = 0;
-      loadTasks();
+      loadTasks(true);
       loadTeams();
       loadWorkspaceUsers();
     } catch (err) {
@@ -268,15 +283,15 @@ export default function App() {
   // ----------------------------------------------------
   // 3. DATA LOADING (TASKS & TEAMS)
   // ----------------------------------------------------
-  const loadTasks = async () => {
-    setIsLoadingTasks(true);
+  const loadTasks = async (silent = false) => {
+    if (!silent) setIsLoadingTasks(true);
     try {
       const data = await apiRequest("/api/tasks");
       setTasks(data.tasks || []);
     } catch (err) {
       setAppMessage(err.message || "Failed to load tasks");
     } finally {
-      setIsLoadingTasks(false);
+      if (!silent) setIsLoadingTasks(false);
     }
   };
 
@@ -1151,23 +1166,25 @@ export default function App() {
                 </button>
               )}
             </div>
-            {userProfile?.system_role === "ARCHITECT" && (
+            {isPrivilegedUser && (
               <button
                 className="action-button"
                 onClick={() => {
                   setShowAdminModal(true);
                   loadAdminUsers();
+                  loadTeams();
+                  loadTasks();
                 }}
                 style={{
                   minHeight: "40px",
                   padding: "0 14px",
                   fontWeight: "700",
-                  background: "#fef3c7",
-                  color: "#92400e",
-                  border: "1px solid #fde68a",
+                  background: userProfile?.system_role === "ARCHITECT" ? "#fef3c7" : "#ede9fe",
+                  color: userProfile?.system_role === "ARCHITECT" ? "#92400e" : "#5b21b6",
+                  border: userProfile?.system_role === "ARCHITECT" ? "1px solid #fde68a" : "1px solid #ddd6fe",
                 }}
               >
-                👑 Architect Panel
+                {userProfile?.system_role === "ARCHITECT" ? "👑 Architect Panel" : "🛡️ Admin Console"}
               </button>
             )}
 
@@ -1795,10 +1812,18 @@ export default function App() {
             </div>
           ) : filteredTasks.length === 0 ? (
             <div style={{ textAlign: "center", padding: "50px 20px", color: "#818a9c" }}>
-              <div style={{ fontSize: "32px", marginBottom: "10px" }}>🏖️</div>
-              <strong>No tasks found in this view.</strong>
-              <p style={{ margin: "5px 0 0", fontSize: "13px" }}>
-                {searchQuery ? "Try adjusting your search or filters." : "Create one above to get started!"}
+              <div style={{ fontSize: "32px", marginBottom: "10px" }}>
+                {activeTab === "teams" ? "👥" : "🏖️"}
+              </div>
+              <strong style={{ fontSize: "16px", color: "#334155" }}>
+                {activeTab === "teams" ? "No tasks assigned to a team yet." : "No tasks found in this view."}
+              </strong>
+              <p style={{ margin: "6px auto 0", fontSize: "13px", maxWidth: "460px", color: "#64748b", lineHeight: 1.5 }}>
+                {activeTab === "teams"
+                  ? "When creating a task above, select a team in the 'Team Scope' dropdown (e.g. #TestTeam!) to allocate it to that team."
+                  : searchQuery
+                  ? "Try adjusting your search query or filters."
+                  : "Create a task above to get started!"}
               </p>
             </div>
           ) : filterStatus !== "all" ? (
@@ -2184,8 +2209,8 @@ export default function App() {
         </div>
       )}
 
-      {/* ARCHITECT ADMIN PANEL MODAL */}
-      {showAdminModal && userProfile?.system_role === "ARCHITECT" && (
+      {/* ARCHITECT & ADMIN MANAGEMENT CONSOLE */}
+      {showAdminModal && isPrivilegedUser && (
         <div
           onClick={() => setShowAdminModal(false)}
           style={{
@@ -2208,162 +2233,447 @@ export default function App() {
             style={{
               background: "white",
               borderRadius: "20px",
-              padding: "28px",
-              maxWidth: "640px",
+              padding: "26px",
+              maxWidth: "740px",
               width: "100%",
               boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
               maxHeight: "90vh",
               overflowY: "auto",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
               <div>
-                <h2 style={{ margin: 0, fontSize: "20px", color: "#0f172a" }}>👑 System Users & Roles</h2>
+                <h2 style={{ margin: 0, fontSize: "20px", color: "#0f172a" }}>
+                  {userProfile?.system_role === "ARCHITECT" ? "👑 Architect Management Console" : "🛡️ Admin Management Console"}
+                </h2>
                 <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748b" }}>
-                  Only visible to Architect. Promote users to Admin or manage system roles.
+                  {userProfile?.system_role === "ARCHITECT"
+                    ? "Root super-admin authority: Manage system roles, teams, and all organization workloads."
+                    : "Administrator authority: Oversight of organization teams, task workloads, and member roster."}
                 </p>
               </div>
               <button
                 onClick={() => setShowAdminModal(false)}
-                style={{ border: 0, background: "transparent", fontSize: "22px", cursor: "pointer", color: "#64748b" }}
+                style={{ border: 0, background: "transparent", fontSize: "24px", cursor: "pointer", color: "#64748b" }}
               >
                 ×
               </button>
             </div>
 
-            {isLoadingAdminUsers ? (
-              <p style={{ color: "#64748b", fontSize: "14px" }}>Loading registered users...</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px" }}>
-                {adminUsers.length === 0 ? (
-                  <p style={{ color: "#94a3b8", fontSize: "13px" }}>No users registered yet.</p>
+            {/* Console Sub-Tabs */}
+            <div style={{ display: "flex", gap: "8px", borderBottom: "1px solid #e2e8f0", paddingBottom: "12px", marginBottom: "16px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminModalTab("users");
+                  loadAdminUsers();
+                }}
+                style={{
+                  padding: "7px 14px",
+                  borderRadius: "8px",
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  background: adminModalTab === "users" ? "#4f46e5" : "#f1f5f9",
+                  color: adminModalTab === "users" ? "white" : "#475569",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                👑 System Users ({adminUsers.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminModalTab("teams");
+                  loadTeams();
+                }}
+                style={{
+                  padding: "7px 14px",
+                  borderRadius: "8px",
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  background: adminModalTab === "teams" ? "#4f46e5" : "#f1f5f9",
+                  color: adminModalTab === "teams" ? "white" : "#475569",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                👥 All Teams ({teams.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminModalTab("tasks");
+                  loadTasks();
+                }}
+                style={{
+                  padding: "7px 14px",
+                  borderRadius: "8px",
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  background: adminModalTab === "tasks" ? "#4f46e5" : "#f1f5f9",
+                  color: adminModalTab === "tasks" ? "white" : "#475569",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                📋 All Tasks ({tasks.length})
+              </button>
+            </div>
+
+            {/* TAB 1: SYSTEM USERS */}
+            {adminModalTab === "users" && (
+              <div>
+                {isLoadingAdminUsers ? (
+                  <p style={{ color: "#64748b", fontSize: "14px" }}>Loading registered users...</p>
                 ) : (
-                  adminUsers.map((u) => {
-                    const isSelf = u.id === userProfile?.id;
-                    return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {adminUsers.length === 0 ? (
+                      <p style={{ color: "#94a3b8", fontSize: "13px" }}>No users registered yet.</p>
+                    ) : (
+                      adminUsers.map((u) => {
+                        const isSelf = u.id === userProfile?.id;
+                        const isArchitectUser = u.system_role === "ARCHITECT";
+                        return (
+                          <div
+                            key={u.id}
+                            style={{
+                              padding: "12px 16px",
+                              borderRadius: "12px",
+                              border: "1px solid #e2e8f0",
+                              background: isSelf ? "#fdfbf7" : "#f8fafc",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "12px",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: "14px", color: "#1e293b" }}>
+                                {u.display_name || u.email} {isSelf && "(You)"}
+                              </div>
+                              <div style={{ fontSize: "12px", color: "#64748b" }}>{u.email}</div>
+                            </div>
+
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                              <span
+                                style={{
+                                  fontSize: "11px",
+                                  fontWeight: 700,
+                                  padding: "3px 8px",
+                                  borderRadius: "999px",
+                                  background: u.account_status === "ACTIVE" ? "#dcfce7" : "#fee2e2",
+                                  color: u.account_status === "ACTIVE" ? "#15803d" : "#b91c1c",
+                                }}
+                              >
+                                {u.account_status || "ACTIVE"}
+                              </span>
+
+                              <span
+                                style={{
+                                  fontSize: "11px",
+                                  fontWeight: 700,
+                                  padding: "4px 9px",
+                                  borderRadius: "999px",
+                                  background:
+                                    u.system_role === "ARCHITECT"
+                                      ? "#fef3c7"
+                                      : u.system_role === "ADMIN"
+                                      ? "#dbeafe"
+                                      : "#f1f5f9",
+                                  color:
+                                    u.system_role === "ARCHITECT"
+                                      ? "#92400e"
+                                      : u.system_role === "ADMIN"
+                                      ? "#1e40af"
+                                      : "#475569",
+                                }}
+                              >
+                                {u.system_role}
+                              </span>
+
+                              {/* Only root Architect can change roles, suspend, or delete */}
+                              {userProfile?.system_role === "ARCHITECT" && !isSelf && !isArchitectUser && (
+                                <>
+                                  <select
+                                    value={u.system_role}
+                                    disabled={isUpdatingUserRole}
+                                    onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
+                                    style={{
+                                      padding: "5px 8px",
+                                      borderRadius: "8px",
+                                      border: "1px solid #cbd5e1",
+                                      fontSize: "12px",
+                                      background: "white",
+                                      cursor: "pointer",
+                                      fontWeight: 500,
+                                    }}
+                                  >
+                                    <option value="USER">USER</option>
+                                    <option value="ADMIN">ADMIN</option>
+                                  </select>
+
+                                  <button
+                                    type="button"
+                                    disabled={isUpdatingUserRole}
+                                    onClick={() => handleToggleUserStatus(u.id, u.account_status)}
+                                    style={{
+                                      padding: "5px 9px",
+                                      borderRadius: "8px",
+                                      border: "1px solid #cbd5e1",
+                                      fontSize: "11px",
+                                      fontWeight: 600,
+                                      background: "#f8fafc",
+                                      color: "#334155",
+                                      cursor: "pointer",
+                                    }}
+                                    title={u.account_status === "ACTIVE" ? "Suspend user" : "Activate user"}
+                                  >
+                                    {u.account_status === "ACTIVE" ? "Suspend" : "Activate"}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    disabled={isUpdatingUserRole}
+                                    onClick={() => handleDeleteUser(u.id, u.email)}
+                                    style={{
+                                      padding: "5px 10px",
+                                      borderRadius: "8px",
+                                      border: "1px solid #fca5a5",
+                                      fontSize: "12px",
+                                      fontWeight: 700,
+                                      background: "#fee2e2",
+                                      color: "#dc2626",
+                                      cursor: "pointer",
+                                      transition: "all 0.15s ease",
+                                    }}
+                                    title="Permanently delete user"
+                                  >
+                                    🗑️ Delete
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: ALL TEAMS OVERVIEW */}
+            {adminModalTab === "teams" && (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: "16px", color: "#1e293b" }}>Organization Teams</h3>
+                    <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
+                      As an {userProfile?.system_role}, you have full oversight and management access over all teams.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => {
+                      setShowAdminModal(false);
+                      setSelectedTeamDetail(null);
+                      setShowTeamModal(true);
+                    }}
+                    style={{ fontSize: "12px", padding: "6px 12px" }}
+                  >
+                    + Create New Team
+                  </button>
+                </div>
+
+                {teams.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px 20px", background: "#f8fafc", borderRadius: "12px", border: "1px dashed #cbd5e1" }}>
+                    <p style={{ margin: "0 0 6px", fontWeight: 600, color: "#334155" }}>No teams have been created yet.</p>
+                    <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>
+                      Create a team using the button above to start grouping tasks and assigning teammates.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {teams.map((t) => (
                       <div
-                        key={u.id}
+                        key={t.id}
                         style={{
-                          padding: "12px 16px",
+                          padding: "14px 16px",
                           borderRadius: "12px",
                           border: "1px solid #e2e8f0",
-                          background: isSelf ? "#fdfbf7" : "#f8fafc",
+                          background: "#f8fafc",
                           display: "flex",
                           justifyContent: "space-between",
                           alignItems: "center",
                           gap: "12px",
+                          flexWrap: "wrap",
                         }}
                       >
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: "14px", color: "#1e293b" }}>
-                            {u.display_name || u.email} {isSelf && "(You - Architect)"}
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <strong style={{ fontSize: "15px", color: "#0f172a" }}>#{t.name}</strong>
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                fontWeight: 700,
+                                padding: "2px 6px",
+                                borderRadius: "999px",
+                                background: "#dbeafe",
+                                color: "#1e40af",
+                              }}
+                            >
+                              {t.member_count || (t.members ? t.members.length : 1)} {(t.member_count === 1 || t.members?.length === 1) ? "member" : "members"}
+                            </span>
                           </div>
-                          <div style={{ fontSize: "12px", color: "#64748b" }}>{u.email}</div>
+                          {t.description && (
+                            <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px" }}>
+                              {t.description}
+                            </div>
+                          )}
+                          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "4px" }}>
+                            Members: {t.members && t.members.length > 0
+                              ? t.members.map(m => m.display_name || m.email).join(", ")
+                              : "No members listed"}
+                          </div>
                         </div>
 
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                          <span
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => {
+                              setShowAdminModal(false);
+                              handleSelectTeam(t);
+                              setShowTeamModal(true);
+                            }}
                             style={{
-                              fontSize: "11px",
-                              fontWeight: 700,
-                              padding: "3px 8px",
-                              borderRadius: "999px",
-                              background:
-                                u.account_status === "ACTIVE" ? "#dcfce7" : "#fee2e2",
-                              color:
-                                u.account_status === "ACTIVE" ? "#15803d" : "#b91c1c",
+                              padding: "6px 12px",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              borderRadius: "8px",
+                              border: "1px solid #cbd5e1",
+                              background: "white",
+                              cursor: "pointer",
                             }}
                           >
-                            {u.account_status || "ACTIVE"}
-                          </span>
-
-                          <span
-                            style={{
-                              fontSize: "11px",
-                              fontWeight: 700,
-                              padding: "4px 9px",
-                              borderRadius: "999px",
-                              background:
-                                u.system_role === "ARCHITECT"
-                                  ? "#fef3c7"
-                                  : u.system_role === "ADMIN"
-                                  ? "#dbeafe"
-                                  : "#f1f5f9",
-                              color:
-                                u.system_role === "ARCHITECT"
-                                  ? "#92400e"
-                                  : u.system_role === "ADMIN"
-                                  ? "#1e40af"
-                                  : "#475569",
-                            }}
-                          >
-                            {u.system_role}
-                          </span>
-
-                          {!isSelf && u.system_role !== "ARCHITECT" && (
-                            <>
-                              <select
-                                value={u.system_role}
-                                disabled={isUpdatingUserRole}
-                                onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
-                                style={{
-                                  padding: "5px 8px",
-                                  borderRadius: "8px",
-                                  border: "1px solid #cbd5e1",
-                                  fontSize: "12px",
-                                  background: "white",
-                                  cursor: "pointer",
-                                  fontWeight: 500,
-                                }}
-                              >
-                                <option value="USER">USER</option>
-                                <option value="ADMIN">ADMIN</option>
-                              </select>
-
-                              <button
-                                type="button"
-                                disabled={isUpdatingUserRole}
-                                onClick={() => handleToggleUserStatus(u.id, u.account_status)}
-                                style={{
-                                  padding: "5px 9px",
-                                  borderRadius: "8px",
-                                  border: "1px solid #cbd5e1",
-                                  fontSize: "11px",
-                                  fontWeight: 600,
-                                  background: "#f8fafc",
-                                  color: "#334155",
-                                  cursor: "pointer",
-                                }}
-                                title={u.account_status === "ACTIVE" ? "Suspend user" : "Activate user"}
-                              >
-                                {u.account_status === "ACTIVE" ? "Suspend" : "Activate"}
-                              </button>
-
-                              <button
-                                type="button"
-                                disabled={isUpdatingUserRole}
-                                onClick={() => handleDeleteUser(u.id, u.email)}
-                                style={{
-                                  padding: "5px 10px",
-                                  borderRadius: "8px",
-                                  border: "1px solid #fca5a5",
-                                  fontSize: "12px",
-                                  fontWeight: 700,
-                                  background: "#fee2e2",
-                                  color: "#dc2626",
-                                  cursor: "pointer",
-                                  transition: "all 0.15s ease",
-                                }}
-                                title="Permanently delete user"
-                              >
-                                🗑️ Delete
-                              </button>
-                            </>
-                          )}
+                            Manage Members & Tasks →
+                          </button>
                         </div>
                       </div>
-                    );
-                  })
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: ALL TASKS (TEAM & PERSONAL) */}
+            {adminModalTab === "tasks" && (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: "16px", color: "#1e293b" }}>Organization Tasks ({tasks.length})</h3>
+                    <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
+                      Viewing all tasks across personal and team scopes.
+                    </p>
+                  </div>
+                  <span style={{ fontSize: "12px", color: "#64748b" }}>
+                    {teamTasksCount} team task{teamTasksCount !== 1 ? "s" : ""} • {tasks.length - teamTasksCount} personal
+                  </span>
+                </div>
+
+                {tasks.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px 20px", background: "#f8fafc", borderRadius: "12px", border: "1px dashed #cbd5e1" }}>
+                    <p style={{ margin: "0 0 6px", fontWeight: 600, color: "#334155" }}>No tasks created yet.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "400px", overflowY: "auto" }}>
+                    {tasks.map((t) => (
+                      <div
+                        key={t.id}
+                        style={{
+                          padding: "10px 14px",
+                          borderRadius: "10px",
+                          border: "1px solid #e2e8f0",
+                          background: "#ffffff",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: "10px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: "200px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <strong style={{ fontSize: "13px", color: "#0f172a" }}>{t.title}</strong>
+                            {t.assigned_team_name ? (
+                              <span style={{ fontSize: "10px", fontWeight: 700, padding: "2px 6px", borderRadius: "999px", background: "#ede9fe", color: "#5b21b6" }}>
+                                #{t.assigned_team_name}
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: "10px", fontWeight: 600, padding: "2px 6px", borderRadius: "999px", background: "#f1f5f9", color: "#64748b" }}>
+                                Personal
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: "11px", color: "#64748b", marginTop: "2px" }}>
+                            By: {t.created_by_name || t.created_by_email || "Unknown"}
+                            {t.assigned_user_name ? ` • Assigned: ${t.assigned_user_name}` : ""}
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: 700,
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              background: t.priority === "HIGH" ? "#fee2e2" : t.priority === "MEDIUM" ? "#fef3c7" : "#f1f5f9",
+                              color: t.priority === "HIGH" ? "#b91c1c" : t.priority === "MEDIUM" ? "#92400e" : "#475569",
+                            }}
+                          >
+                            {t.priority}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: 700,
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              background: t.status === "COMPLETED" ? "#dcfce7" : "#e0e7ff",
+                              color: t.status === "COMPLETED" ? "#15803d" : "#4338ca",
+                            }}
+                          >
+                            {t.status}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAdminModal(false);
+                              setEditingTaskItem(t);
+                            }}
+                            style={{
+                              border: "1px solid #cbd5e1",
+                              background: "#f8fafc",
+                              borderRadius: "6px",
+                              padding: "3px 8px",
+                              fontSize: "11px",
+                              cursor: "pointer",
+                            }}
+                          >
+                            ✏️ Edit
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}

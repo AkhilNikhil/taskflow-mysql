@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request, g
 from app import db
 from app.models import User, Team, TeamMember, Task
 from app.authz import (
-    auth_required, architect_required, ROOT_ARCHITECT_EMAIL,
+    auth_required, architect_required, admin_required, ROOT_ARCHITECT_EMAIL,
     SYSTEM_ROLE_ADMIN, SYSTEM_ROLE_USER,
 )
 
@@ -11,7 +11,7 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
 @admin_bp.route("/users", methods=["GET"])
 @auth_required
-@architect_required
+@admin_required
 def list_users():
     users = User.query.order_by(User.created_at.desc()).all()
     return jsonify({
