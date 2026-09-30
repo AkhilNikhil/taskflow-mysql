@@ -58,6 +58,19 @@ http://localhost:8080
 3. Click **Register** &rarr; You are **immediately authenticated** with a native JWT token and taken to the workspace dashboard. No email verification or third-party links required.
 4. The first user to register automatically receives the **ARCHITECT** super-admin role!
 
+### 5. Access Database Web Dashboard (Adminer)
+Open your browser to:
+```
+http://localhost:8081
+```
+- **System**: `MySQL`
+- **Server**: `db` (pre-filled)
+- **Username**: `taskflow`
+- **Password**: `taskflowpass123`
+- **Database**: `taskflow`
+
+Provides a Supabase-like visual dashboard to inspect tables, view rows, and edit data directly in your browser.
+
 ---
 
 ## 🚀 AWS EC2 Deployment Runbook

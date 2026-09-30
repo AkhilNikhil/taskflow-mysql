@@ -24,9 +24,11 @@
 | Environment | Service | URL | Notes |
 |---|---|---|---|
 | **EC2 (Production)** | Web App (Frontend) | `http://<EC2-PUBLIC-IP>` | Port 80 (standard HTTP) |
+| **EC2 (Production)** | Database Web UI (Adminer) | `http://<EC2-PUBLIC-IP>:8081` | Visual table browser (open port 8081 in SG) |
 | **EC2 (Production)** | Health Check | `http://<EC2-PUBLIC-IP>/api/health` | Proxied via Nginx |
 | **EC2 (Production)** | Direct Backend API | `http://<EC2-PUBLIC-IP>:5000` | Port 5000 on host |
 | **Local (Dev)** | Web App (Frontend) | `http://localhost:8080` | Port 8080 |
+| **Local (Dev)** | Database Web UI (Adminer) | `http://localhost:8081` | Supabase-like visual table browser |
 | **Local (Dev)** | Health Check | `http://localhost:5001/api/health` | Backend port 5001 |
 
 ### 🔑 Credentials Reference

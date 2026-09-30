@@ -51,6 +51,18 @@ services:
     ports:
       - "${FRONTEND_PORT:-8080}:80"
 
+  db-ui:
+    image: adminer:latest
+    container_name: taskflow-mysql-ui
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "${DB_UI_PORT:-8081}:8080"
+
 volumes:
   mysql_data:
     driver: local
