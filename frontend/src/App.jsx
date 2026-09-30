@@ -196,17 +196,30 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backendStatus, session?.user?.id, userProfile, syncRetry]);
 
-  // Periodic background sync to keep roles, teams, and tasks updated across browser tabs
+  // Smart background sync: pauses when tab is hidden, syncs immediately on window focus
   useEffect(() => {
     if (!session || backendStatus !== "connected") return;
+
     const interval = setInterval(() => {
-      syncProfile();
-    }, 12000);
-    const onFocus = () => syncProfile();
-    window.addEventListener("focus", onFocus);
+      // Pause background polling if the browser tab is minimized or hidden
+      if (document.visibilityState === "visible") {
+        syncProfile();
+      }
+    }, 30000); // Sensible 30s interval for active tabs
+
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === "visible") {
+        syncProfile();
+      }
+    };
+
+    window.addEventListener("focus", onFocusOrVisible);
+    document.addEventListener("visibilitychange", onFocusOrVisible);
+
     return () => {
       clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("focus", onFocusOrVisible);
+      document.removeEventListener("visibilitychange", onFocusOrVisible);
     };
   }, [session, backendStatus]);
 
