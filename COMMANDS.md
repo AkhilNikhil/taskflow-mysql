@@ -14,6 +14,8 @@
 6. [Container Shell & Debugging Commands](#6-container-shell--debugging-commands)
 7. [API Direct Curl Tests](#7-api-direct-curl-tests)
 8. [Docker Cleanup & Reset Commands](#8-docker-cleanup--reset-commands)
+9. [JWT Secret Generation Commands](#9-jwt-secret-generation-commands)
+10. [Cloud Troubleshooting & Diagnostics Commands](#10-cloud-troubleshooting--diagnostics-commands)
 
 ---
 
@@ -362,3 +364,74 @@ docker system df
 # Complete Docker purge (containers, images, volumes, networks)
 docker system prune -a --volumes -f
 ```
+
+---
+
+## 9. JWT Secret Generation Commands
+
+Use these commands to generate a cryptographically secure 64-character (32-byte) random secret for your production `.env`:
+
+```bash
+# Option A: Linux / EC2 terminal (built-in openssl)
+openssl rand -hex 32
+
+# Option B: Python (works on Windows, Mac, or Linux)
+python3 -c "import secrets; print(secrets.token_hex(32))"
+
+# Option C: PowerShell (Windows)
+[BitConverter]::ToString((1..32 | ForEach-Object { Get-Random -Minimum 0 -Maximum 256 })).Replace("-","").ToLower()
+```
+
+> **Rules for `JWT_SECRET`:**
+> - Must be at least 32 characters long.
+> - Must not contain spaces.
+> - Can use letters, numbers, hyphens, and underscores.
+
+---
+
+## 10. Cloud Troubleshooting & Diagnostics Commands
+
+### 🚨 1. Disk Full: `Error 28: No space left on device` / MySQL Container Fails
+Run on EC2 when MySQL exits or building Vite fails:
+```bash
+# 1. Resize swap to 512MB (frees 1.5GB immediately)
+sudo swapoff /swapfile && sudo fallocate -l 512M /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+
+# 2. Clear Docker build cache (frees ~1-2GB)
+docker builder prune -a -f
+
+# 3. Check free disk space
+df -h /
+
+# 4. Clean broken database volume and restart
+cd ~/taskflow-mysql
+docker compose down -v
+docker compose up -d
+```
+
+### 🌐 2. Adminer UI Access (`ERR_CONNECTION_TIMED_OUT` or Firewalled)
+```bash
+# Option A: Encrypted SSH Tunnel from local laptop terminal (Zero firewall changes)
+ssh -i /path/to/your-key.pem -L 8081:localhost:8081 ubuntu@<EC2-PUBLIC-IP>
+# Then open on your laptop: http://localhost:8081
+
+# Option B: Direct Browser Access (requires Inbound Rule for Port 8081 in AWS SG)
+# Navigate to: http://<EC2-PUBLIC-IP>:8081
+```
+
+**Adminer Login Fields:**
+- **System**: `MySQL`
+- **Server**: `db` *(must type `db`, not `localhost`)*
+- **Username**: `taskflow`
+- **Password**: *(The `MYSQL_PASSWORD` value in your `.env`)*
+- **Database**: `taskflow`
+
+### 🔄 3. Apply `.env` Changes to Running Containers
+```bash
+# Force containers to recreate and read new environment variables
+docker compose up -d --force-recreate
+```
+
+### 💻 4. EC2 Sizing Recommendations
+- **`t3.small` / `t2.small` (2GB RAM, 20GB Disk)**: Recommended for building from source (`docker compose up -d --build`).
+- **`t2.micro` / `t3.micro` (1GB RAM, 15-20GB Disk)**: Best with Docker Hub pre-built images (`docker compose -f docker-compose.hub.yml up -d`). Use 512MB swap.
