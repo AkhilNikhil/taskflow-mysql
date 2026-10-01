@@ -93,10 +93,10 @@ Provides a Supabase-like visual dashboard to inspect tables, view rows, and edit
 ssh -i /path/to/your-key.pem ubuntu@<EC2-PUBLIC-IP>
 ```
 
-### 2. Install Docker & Docker Compose (if not already installed)
+### 2. Install Docker, Compose, Git & Curl (if not already installed)
 ```bash
 sudo apt-get update
-sudo apt-get install -y docker.io docker-compose-v2
+sudo apt-get install -y docker.io docker-compose-v2 git curl
 sudo usermod -aG docker ubuntu
 newgrp docker
 ```
