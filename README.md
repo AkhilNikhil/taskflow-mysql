@@ -7,6 +7,13 @@ This repository contains the standalone, fully self-contained edition of **TaskF
 - **Frontend**: **React 19** + **Vite 6** served via **Nginx** reverse proxy.
 - **Zero Public IP Configuration**: The browser communicates with relative `/api/` endpoints. Nginx internally reverse-proxies requests to `http://backend:5000/api/`. When the EC2 public IP changes, the frontend continues to work with zero configuration updates.
 
+### 🐳 Published Docker Hub Images
+This project is packaged and published to Docker Hub for instant 1-command cloud deployments:
+- **Backend API**: [`akhilbm/taskflow-backend:v1.0`](https://hub.docker.com/r/akhilbm/taskflow-backend) (and `:latest`)
+- **Frontend SPA**: [`akhilbm/taskflow-frontend:v1.0`](https://hub.docker.com/r/akhilbm/taskflow-frontend) (and `:latest`)
+- **Database**: Official `mysql:8.0`
+- **Database UI**: Official `adminer:latest`
+
 ---
 
 ## 🏗️ Architecture
@@ -94,35 +101,64 @@ sudo usermod -aG docker ubuntu
 newgrp docker
 ```
 
-### 3. Clone Repository or Transfer `taskflow-mysql`
-```bash
-git clone <YOUR-REPO-URL>
-cd taskflow-mysql
-```
+### 🚀 Choose Your Deployment Method
 
-### 4. Configure Production Environment (`.env`)
+You can deploy TaskFlow on EC2 in **two different ways**, depending on your workflow:
+
+---
+
+#### 🔹 Method 1: Instant Cloud Deployment via Docker Hub (Fastest — 30 Seconds)
+> **Best for**: Production servers, EC2, staging, and demo environments.  
+> **Advantage**: **No Git cloning or source code needed on EC2.** It pulls pre-built optimized images directly from Docker Hub, eliminating build times and saving memory on small instances (like `t2.micro`).
+
 ```bash
+# 1. Create a clean project folder
+mkdir -p ~/taskflow-mysql && cd ~/taskflow-mysql
+
+# 2. Configure production credentials
 cat << 'EOF' > .env
 MYSQL_ROOT_PASSWORD=your_secure_root_password_here
 MYSQL_DATABASE=taskflow
 MYSQL_USER=taskflow
 MYSQL_PASSWORD=your_secure_db_password_here
-ROOT_ARCHITECT_EMAIL=your_email@example.com
+ROOT_ARCHITECT_EMAIL=akhilbm13@gmail.com
 JWT_SECRET=your_jwt_secret_random_hex_string_here
 FRONTEND_PORT=80
 BACKEND_PORT=5000
 DB_UI_PORT=8081
 EOF
-```
 
-### 5. Launch the Stack
-```bash
+# 3. Download the production Compose file (configured to pull from Docker Hub)
+curl -sSL https://raw.githubusercontent.com/AkhilNikhil/taskflow-mysql/main/docker-compose.hub.yml -o docker-compose.yml
+
+# 4. Pull pre-built images and start the stack
 docker compose up -d
-```
-*(Alternatively, to build locally from source on the machine: `docker compose up -d --build`)*
 
-### 6. Verify Application Health
+# 5. Verify health
+docker compose ps
+curl http://localhost/api/health
+```
+
+---
+
+#### 🔹 Method 2: Deployment via Cloning Git Repository & Building From Source
+> **Best for**: Development, code contributions, and testing custom code changes directly on the host.  
+> **Advantage**: Full access to all raw source files (`/backend`, `/frontend`) and ability to rebuild containers locally.
+
 ```bash
+# 1. Clone your GitHub repository
+git clone https://github.com/AkhilNikhil/taskflow-mysql.git
+cd taskflow-mysql
+
+# 2. Set up your environment file
+cp .env.example .env
+# Edit .env with your secure production passwords:
+# nano .env
+
+# 3. Build Docker images from local source and launch
+docker compose up -d --build
+
+# 4. Verify health
 docker compose ps
 curl http://localhost/api/health
 ```
