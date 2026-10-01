@@ -415,8 +415,15 @@ docker compose up -d
 ssh -i /path/to/your-key.pem -L 8081:localhost:8081 ubuntu@<EC2-PUBLIC-IP>
 # Then open on your laptop: http://localhost:8081
 
-# Option B: Direct Browser Access (requires Inbound Rule for Port 8081 in AWS SG)
-# Navigate to: http://<EC2-PUBLIC-IP>:8081
+# Option B: Direct Browser Access (Expose 0.0.0.0 on EC2 instead of 127.0.0.1)
+# 1. On EC2: unbind 127.0.0.1 and expose port 8081 publicly
+cd ~/taskflow-mysql
+sed -i 's/127.0.0.1:\${DB_UI_PORT:-8081}/0.0.0.0:\${DB_UI_PORT:-8081}/' docker-compose.yml
+docker compose up -d
+docker compose ps
+
+# 2. In AWS Console: Inbound Rule for Custom TCP Port 8081 (Source: 0.0.0.0/0)
+# 3. Open in Browser: http://<EC2-PUBLIC-IP>:8081 (use http://, not https://)
 ```
 
 **Adminer Login Fields:**

@@ -211,9 +211,30 @@ ssh -i /path/to/your-key.pem -L 8081:localhost:8081 ubuntu@<YOUR-EC2-PUBLIC-IP>
 Now, open your laptop browser to:
 👉 **`http://localhost:8081`**
 
-#### Option B: Direct Browser Access
-If you opened port `8081` in your AWS Security Group and bound Adminer to `0.0.0.0`, navigate to:
-👉 **`http://<YOUR-EC2-PUBLIC-IP>:8081`**
+#### Option B: Direct Browser Access (Port 8081)
+If you prefer to access Adminer directly in your browser without setting up an SSH tunnel:
+
+1. **Unbind `127.0.0.1` and bind to `0.0.0.0` on your EC2 instance**:  
+   By default, `docker-compose.hub.yml` binds Adminer to `127.0.0.1` for production security. Run these commands on your EC2 terminal to expose it to the internet:
+   ```bash
+   cd ~/taskflow-mysql
+   sed -i 's/127.0.0.1:\${DB_UI_PORT:-8081}/0.0.0.0:\${DB_UI_PORT:-8081}/' docker-compose.yml
+   docker compose up -d
+   docker compose ps
+   ```
+   *(Verify in `docker compose ps` that PORTS displays `0.0.0.0:8081->8080/tcp` instead of `127.0.0.1`)*
+
+2. **Open Port 8081 in AWS Security Group**:
+   - In AWS EC2 Console ➔ **Instances** ➔ Select your instance ➔ **Security** tab ➔ Click your Security Group.
+   - Click **Edit inbound rules** ➔ **Add rule**:
+     - **Type**: `Custom TCP`
+     - **Port range**: `8081`
+     - **Source**: `Anywhere-IPv4` (`0.0.0.0/0`) or `My IP`
+   - Click **Save rules**.
+
+3. **Open in Browser**:
+   👉 **`http://<YOUR-EC2-PUBLIC-IP>:8081`**  
+   *(Make sure to use `http://`, not `https://`)*
 
 ---
 
@@ -260,6 +281,20 @@ This section documents every error message, root cause, and copy-paste solution 
   ssh -i /path/to/your-key.pem -L 8081:localhost:8081 ubuntu@<YOUR-EC2-PUBLIC-IP>
   ```
   Now open `http://localhost:8081` on your laptop browser.
+
+---
+
+### 1B. `ERR_CONNECTION_REFUSED` when accessing `http://<EC2-PUBLIC-IP>:8081`
+- **Symptom**: Browser immediately displays `This site can’t be reached — <EC2-IP> refused to connect. ERR_CONNECTION_REFUSED`.
+- **Root Cause**: The AWS Security Group allowed the incoming packet, but Docker is listening strictly on `127.0.0.1` (loopback) inside the EC2 instance, so Linux immediately rejects external traffic.
+- **Immediate Copy-Paste Fix (Run on EC2 Terminal)**:
+  ```bash
+  cd ~/taskflow-mysql
+  sed -i 's/127.0.0.1:\${DB_UI_PORT:-8081}/0.0.0.0:\${DB_UI_PORT:-8081}/' docker-compose.yml
+  docker compose up -d
+  docker compose ps
+  ```
+  *(Verify in `docker compose ps` that the PORTS column shows `0.0.0.0:8081->8080/tcp` instead of `127.0.0.1:8081`)*
 
 ---
 
