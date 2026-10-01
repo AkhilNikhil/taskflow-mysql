@@ -302,3 +302,26 @@ volumes:
 | **Why Werkzeug PBKDF2 instead of plain MD5 or SHA256?** | *"Plain SHA256 is fast, making it vulnerable to brute force and rainbow table attacks. PBKDF2 uses thousands of key-stretching iterations with random salt, conforming to modern NIST standards."* |
 | **Why PyMySQL instead of MySQLdb?** | *"PyMySQL is a 100% pure Python client. MySQLdb requires native C compilation libraries (`libmysqlclient-dev`), which would balloon our Docker image size and cause cross-platform compilation errors."* |
 | **Why Gunicorn instead of Flask's built-in server?** | *"Flask's development server is single-threaded and explicitly warns not to use it in production. Gunicorn provides master-worker process pooling with worker auto-recovery."* |
+
+---
+
+## MODULE 7: Real-World Cloud Troubleshooting Drills
+
+If your interviewer asks: *"What real-world issues have you debugged while deploying multi-container stacks to AWS EC2?"* — you can walk them through these exact scenarios:
+
+### Scenario 1: "My container failed with `Error 28: No space left on device`"
+- **Interviewer**: *"You deploy on a t2.micro or t3.micro EC2 instance, and your database crashes with OS Error 28. What happened and how do you fix it?"*
+- **Your Answer**:
+  > *"AWS EC2 default EBS root volumes are only 8GB. When developers build Vite/React and Python images from source on the machine while having a 2GB swap file, the Docker build cache fills the root disk to 100%.*  
+  > *I resolve it by: (1) resizing swap to a lightweight 512MB, (2) running `docker builder prune -a -f` to purge build layers, and (3) purging the interrupted MySQL volume with `docker compose down -v`. For production, I recommend either allocating a 20GB EBS disk or using pre-built images from Docker Hub via `docker-compose.hub.yml` so the server never has to build anything."*
+
+### Scenario 2: "The website times out on port 8081 with `ERR_CONNECTION_TIMED_OUT`"
+- **Interviewer**: *"A developer says they cannot open Adminer on port 8081. The browser times out. Where do you look?"*
+- **Your Answer**:
+  > *"A timeout (`ERR_CONNECTION_TIMED_OUT`) almost always points to AWS Security Group packet dropping. Port 8081 is closed in the inbound rules.*  
+  > *Instead of blindly opening port 8081 to the entire public internet (which exposes a database UI to bot scanners), the best practice is to access it securely through an encrypted SSH tunnel: `ssh -L 8081:localhost:8081 ubuntu@<EC2-IP>` and open `http://localhost:8081` locally."*
+
+### Scenario 3: "Adminer shows `Access denied for user 'taskflow'@'%'`"
+- **Interviewer**: *"The developer reached the Adminer screen, but login fails. What are the common pitfalls?"*
+- **Your Answer**:
+  > *"First, developers commonly type `localhost` into the Server field. Inside a Docker network, containers communicate using Docker DNS service names, so the Server field must be `db`. Second, the password must match the `MYSQL_PASSWORD` variable defined in `.env`."*

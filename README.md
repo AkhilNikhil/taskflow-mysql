@@ -231,19 +231,47 @@ docker exec -it taskflow-mysql-db mysql -u taskflow -p taskflow
 
 ---
 
-## 🔧 Comprehensive Troubleshooting Guide
+## 🔧 Comprehensive Cloud Troubleshooting & Diagnostics Manual
 
-### 1. `ERROR 28: No space left on device` / `container taskflow-mysql-db is unhealthy`
-- **Cause**: The EC2 root EBS volume (typically 8GB) ran out of disk space due to Docker build cache, downloaded images, and/or a 2GB swap file.
-- **Solution**:
+This section documents every error message, root cause, and copy-paste solution encountered when deploying TaskFlow on AWS EC2 or local Docker.
+
+---
+
+### 1. `ERR_CONNECTION_TIMED_OUT` when accessing `http://<EC2-PUBLIC-IP>:8081` or Port 80
+- **Symptom**: Browser spins for 30 seconds and fails with `ERR_CONNECTION_TIMED_OUT`.
+- **Root Cause**: The **AWS Security Group** inbound firewall is blocking packets on that port. AWS drops blocked packets silently.
+- **Solution A (Open Port in AWS Console)**:
+  1. Go to **AWS EC2 Console** ➔ **Instances** ➔ select your instance.
+  2. Click the **Security** tab ➔ Click your **Security Group** name.
+  3. Click **Edit inbound rules** ➔ Click **Add rule**:
+     - For Web App: **HTTP** | Port `80` | Source `0.0.0.0/0` (Anywhere)
+     - For Web App (Dev Port): **Custom TCP** | Port `8080` | Source `0.0.0.0/0`
+     - For Adminer UI: **Custom TCP** | Port `8081` | Source `0.0.0.0/0` (or `My IP`)
+  4. Click **Save rules**. Traffic connects instantly.
+- **Solution B (Access Securely via SSH Tunnel — Zero Firewall Changes)**:
+  Open a tunnel from your local laptop terminal:
   ```bash
-  # 1. Resize swap to 512M to free 1.5GB of disk
+  ssh -i /path/to/your-key.pem -L 8081:localhost:8081 ubuntu@<YOUR-EC2-PUBLIC-IP>
+  ```
+  Now open `http://localhost:8081` on your laptop browser.
+
+---
+
+### 2. `ERROR 28: No space left on device` / `Container taskflow-mysql-db is unhealthy`
+- **Symptom**: MySQL stops with `[ERROR] [MY-012640] [InnoDB] Error number 28 means 'No space left on device'` and container loops in `Restarting (1)`.
+- **Root Cause**: The default AWS 8GB root disk filled to 100% capacity due to building Vite/React from source (`npm install` cache) and/or an oversized 2GB swap file.
+- **Immediate Copy-Paste Fix**:
+  ```bash
+  # 1. Resize swap to 512M (immediately frees 1.5GB of disk)
   sudo swapoff /swapfile && sudo fallocate -l 512M /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
 
-  # 2. Prune Docker build cache to free ~1GB
+  # 2. Prune Docker build cache (frees ~1GB to 2GB)
   docker builder prune -a -f
 
-  # 3. Wipe broken partial database volume and restart
+  # 3. Check that you have at least 2GB free
+  df -h /
+
+  # 4. Wipe broken partial database volume and restart
   cd ~/taskflow-mysql
   docker compose down -v
   docker compose up -d
@@ -251,27 +279,79 @@ docker exec -it taskflow-mysql-db mysql -u taskflow -p taskflow
 
 ---
 
-### 2. Backend Reports `(health: starting)`
-- **Cause**: Normal Docker startup behavior. The backend healthcheck in `Dockerfile` uses a 30-second interval.
-- **Solution**: Wait 30 seconds and re-run `docker compose ps`. It will automatically change to `(healthy)`.
+### 3. `curl: (7) Failed to connect to localhost port 80: Connection refused`
+- **Symptom**: Port 80 fails to connect, but port 8080 works.
+- **Root Cause**: The `.env` file has `FRONTEND_PORT=8080` (the default local conflict-prevention port) instead of `FRONTEND_PORT=80`.
+- **Solution**:
+  ```bash
+  # In ~/taskflow-mysql/.env, change FRONTEND_PORT:
+  sed -i 's/FRONTEND_PORT=8080/FRONTEND_PORT=80/' .env
+  sed -i 's/BACKEND_PORT=5001/BACKEND_PORT=5000/' .env
+
+  # Recreate containers with new port mappings:
+  docker compose up -d
+  ```
 
 ---
 
-### 3. Browser Shows `ERR_CONNECTION_TIMED_OUT` or Cannot Connect
-- **Check AWS Security Group**:
-  - In AWS EC2 Console ➔ **Security Groups** ➔ **Edit Inbound Rules**:
-    - Add **HTTP** (Port `80`) from Source `0.0.0.0/0`.
-    - If running on port 8080, add **Custom TCP** (Port `8080`) from Source `0.0.0.0/0`.
-- **Check Port Mapping in `.env`**:
-  - Ensure `FRONTEND_PORT=80` in `.env` if accessing directly via `http://<EC2-PUBLIC-IP>`.
+### 4. Adminer Shows: `Access denied for user 'taskflow'@'%'` or `Connection refused`
+- **Symptom**: Adminer displays a red error on login.
+- **Root Cause & Fixes**:
+  1. **Server field must be `db`**: Inside Docker, MySQL is addressed by its service name `db`, **NOT** `localhost`.
+  2. **Password Mismatch**: The password in Adminer must match the exact `MYSQL_PASSWORD` in your `.env` file. Inspect it via:
+     ```bash
+     grep MYSQL_PASSWORD ~/taskflow-mysql/.env
+     ```
+  3. **System field**: Must be set to `MySQL`.
 
 ---
 
-### 4. How to Completely Reset & Reinitialize the Database
-If you ever want to wipe all test data and let TaskFlow re-initialize cleanly:
-```bash
-cd ~/taskflow-mysql
-docker compose down -v
-docker compose up -d
-```
-```
+### 5. EC2 Instance / SSH is Sluggish & Freezing
+- **Symptom**: Commands lag in SSH, terminal output freezes.
+- **Root Cause**:
+  1. Building from source on a `t2.micro` burns through AWS CPU burst credits, causing AWS to throttle CPU to 10–20%.
+  2. 1GB RAM is at 90% capacity with 0MB swap.
+- **Solution**:
+  1. Add 512MB Swap:
+     ```bash
+     sudo fallocate -l 512M /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+     ```
+  2. Switch to **Method 1 (Docker Hub Images)** via `docker-compose.hub.yml` so the server never builds from source.
+  3. Or upgrade to a **`t3.small`** (2GB RAM, 20GB Disk) for a butter-smooth experience.
+
+---
+
+### 6. Database Dirty Volume Loop: `--initialize specified but data directory has files in it`
+- **Symptom**: MySQL crashed on its first boot, and now refuses to start with `[ERROR] [MY-010457] [Server] --initialize specified but the data directory has files in it. Aborting.`
+- **Root Cause**: An aborted startup left half-written tables in `/var/lib/mysql`.
+- **Solution**:
+  ```bash
+  cd ~/taskflow-mysql
+  # Purge the corrupted volume
+  docker compose down -v
+  # Re-launch cleanly
+  docker compose up -d
+  ```
+
+---
+
+### 7. Changes to `.env` Are Not Reflected in Containers
+- **Symptom**: You edited `.env`, but the app is still using the old password or port.
+- **Root Cause**: Docker Compose does not recreate running containers if the `docker-compose.yml` definition didn't change.
+- **Solution**:
+  ```bash
+  docker compose up -d --force-recreate
+  ```
+
+---
+
+### 8. Vite Build Fails with `JavaScript heap out of memory` (OOM Killer)
+- **Symptom**: Running `docker compose up -d --build` fails during `npm run build` with `Killed` or code 137.
+- **Root Cause**: Node.js Vite compiler exceeded the 1GB RAM limit on `t2.micro`.
+- **Solution**:
+  - Enable swap memory (`sudo swapon /swapfile`).
+  - Or deploy via **Method 1 (Docker Hub Pre-built Images)**:
+    ```bash
+    curl -sSL https://raw.githubusercontent.com/AkhilNikhil/taskflow-mysql/main/docker-compose.hub.yml -o docker-compose.yml
+    docker compose up -d
+    ```
