@@ -82,24 +82,40 @@ Provides a Supabase-like visual dashboard to inspect tables, view rows, and edit
 
 ## 🚀 AWS EC2 Deployment Runbook
 
-### Prerequisites
-- An Ubuntu 24.04 LTS EC2 Instance (t3.micro or t3.small)
-- Inbound Security Group Rules:
-  - Port `80` (HTTP)
-  - Port `22` (SSH)
+### 💻 Recommended Instance Sizing & Disk Configuration
+
+| Instance Type | RAM | Recommended EBS Disk | Best Used For | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **`t3.small` / `t2.small`** <br>*(Recommended)* | **2 GB** | **20 GB** | **Both Methods** (Source Build or Docker Hub) | **Optimal experience.** 2GB RAM handles `npm run build` and runs MySQL, Flask, React, and Adminer simultaneously with zero CPU throttling. |
+| **`t3.micro` / `t2.micro`** <br>*(Free Tier)* | **1 GB** | **15 GB - 20 GB** | **Method 1 (Docker Hub Images)** | **Supported with caveats.** When launching instance in AWS Console, **change root disk from 8GB to 15GB–20GB**. Use 512MB swap. Use Method 1 to avoid burning CPU build credits. |
+
+> ⚠️ **Important on 8GB Disks**: The default AWS 8GB EBS disk can easily run out of space (`Error 28: No space left on device`) if you build React from source while having a large swap file. If using an 8GB disk, use **Method 1** or run `docker builder prune -a -f` to clear build caches.
+
+---
 
 ### 1. Connect to your EC2 Instance
 ```bash
 ssh -i /path/to/your-key.pem ubuntu@<EC2-PUBLIC-IP>
 ```
 
-### 2. Install Docker, Compose, Git & Curl (if not already installed)
+### 2. Optional: Configure 512MB Swap (Recommended for 1GB RAM Instances)
+```bash
+sudo fallocate -l 512M /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+### 3. Install Docker, Compose, Git & Curl (if not already installed)
 ```bash
 sudo apt-get update
 sudo apt-get install -y docker.io docker-compose-v2 git curl
 sudo usermod -aG docker ubuntu
 newgrp docker
 ```
+
+---
 
 ### 🚀 Choose Your Deployment Method
 
@@ -165,22 +181,97 @@ curl http://localhost/api/health
 
 ---
 
-## 🛡️ Database Management & Inspections
+## 🖥️ Accessing TaskFlow in Your Browser
 
-### Connect directly to MySQL inside the container:
+- **TaskFlow Web App**: Open your browser to:
+  ```text
+  http://<YOUR-EC2-PUBLIC-IP>
+  ```
+  *(If you left `FRONTEND_PORT=8080`, open `http://<YOUR-EC2-PUBLIC-IP>:8080`)*
+
+---
+
+## 🛡️ Database Management & Accessing Adminer Web UI
+
+You can manage your live database in the browser using the integrated **Adminer** dashboard.
+
+### 🌐 Accessing Adminer in Your Browser
+
+#### Option A: Secure SSH Tunnel (Recommended for Production)
+Because Adminer is bound strictly to `127.0.0.1` in production for security, open an encrypted SSH tunnel from your local laptop terminal:
 ```bash
-# Prompts securely for password
+ssh -i /path/to/your-key.pem -L 8081:localhost:8081 ubuntu@<YOUR-EC2-PUBLIC-IP>
+```
+Now, open your laptop browser to:
+👉 **`http://localhost:8081`**
+
+#### Option B: Direct Browser Access
+If you opened port `8081` in your AWS Security Group and bound Adminer to `0.0.0.0`, navigate to:
+👉 **`http://<YOUR-EC2-PUBLIC-IP>:8081`**
+
+---
+
+### 🔑 Adminer Login Credentials
+Once the login page appears, enter:
+- **System**: `MySQL`
+- **Server**: `db` *(the internal Docker service name)*
+- **Username**: `taskflow`
+- **Password**: *(The `MYSQL_PASSWORD` value you defined in `.env`)*
+- **Database**: `taskflow`
+
+Click **Login** to inspect tables, view rows, and run live SQL queries.
+
+---
+
+### CLI Database Inspection (Inside Container):
+```bash
+# Prompts securely for password:
 docker exec -it taskflow-mysql-db mysql -u taskflow -p taskflow
 ```
 
-### Useful SQL Queries:
-```sql
--- View all registered users
-SELECT id, email, display_name, system_role, account_status, created_at FROM users;
+---
 
--- View created teams
-SELECT id, name, active_status, created_at FROM teams;
+## 🔧 Comprehensive Troubleshooting Guide
 
--- View tasks
-SELECT id, title, status, priority, owner_user_id FROM tasks;
+### 1. `ERROR 28: No space left on device` / `container taskflow-mysql-db is unhealthy`
+- **Cause**: The EC2 root EBS volume (typically 8GB) ran out of disk space due to Docker build cache, downloaded images, and/or a 2GB swap file.
+- **Solution**:
+  ```bash
+  # 1. Resize swap to 512M to free 1.5GB of disk
+  sudo swapoff /swapfile && sudo fallocate -l 512M /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+
+  # 2. Prune Docker build cache to free ~1GB
+  docker builder prune -a -f
+
+  # 3. Wipe broken partial database volume and restart
+  cd ~/taskflow-mysql
+  docker compose down -v
+  docker compose up -d
+  ```
+
+---
+
+### 2. Backend Reports `(health: starting)`
+- **Cause**: Normal Docker startup behavior. The backend healthcheck in `Dockerfile` uses a 30-second interval.
+- **Solution**: Wait 30 seconds and re-run `docker compose ps`. It will automatically change to `(healthy)`.
+
+---
+
+### 3. Browser Shows `ERR_CONNECTION_TIMED_OUT` or Cannot Connect
+- **Check AWS Security Group**:
+  - In AWS EC2 Console ➔ **Security Groups** ➔ **Edit Inbound Rules**:
+    - Add **HTTP** (Port `80`) from Source `0.0.0.0/0`.
+    - If running on port 8080, add **Custom TCP** (Port `8080`) from Source `0.0.0.0/0`.
+- **Check Port Mapping in `.env`**:
+  - Ensure `FRONTEND_PORT=80` in `.env` if accessing directly via `http://<EC2-PUBLIC-IP>`.
+
+---
+
+### 4. How to Completely Reset & Reinitialize the Database
+If you ever want to wipe all test data and let TaskFlow re-initialize cleanly:
+```bash
+cd ~/taskflow-mysql
+docker compose down -v
+docker compose up -d
+```
 ```
