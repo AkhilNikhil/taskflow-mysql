@@ -121,11 +121,17 @@ newgrp docker
 
 You can deploy TaskFlow on EC2 in **two different ways**, depending on your workflow:
 
+| Metric | Method 1: Docker Hub Images (Recommended) | Method 2: Git Clone & Source Build |
+| :--- | :--- | :--- |
+| **Disk Space Consumed** | **~300 MB** (Clean production runtime) | **~2.5 GB** (Node.js builder + `node_modules` + cache) |
+| **Peak RAM Spike** | **~30 MB** (No compiler overhead) | **~800 MB** (Vite/Node compilation pressure) |
+| **Startup Time** | **~20 seconds** | **~3 to 5 minutes** |
+| **EC2 Instance Fit** | Runs smoothly on `t2.micro` (1GB RAM) | Requires `t3.small` (2GB RAM) or 512MB swap |
+
 ---
 
 #### 🔹 Method 1: Instant Cloud Deployment via Docker Hub (Fastest — 30 Seconds)
-> **Best for**: Production servers, EC2, staging, and demo environments.  
-> **Advantage**: **No Git cloning or source code needed on EC2.** It pulls pre-built optimized images directly from Docker Hub, eliminating build times and saving memory on small instances (like `t2.micro`).
+> **Best for**: Production servers, EC2, staging, and demo environments. Zero Git cloning or source code required on the server.
 
 ```bash
 # 1. Create a clean project folder

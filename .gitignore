@@ -27,6 +27,9 @@ dist-ssr/
 *.log
 *COMPLETE_SOURCE_AND_GUIDE.md
 *.html
+*INTERVIEW*
+*PREP*
+PRACTICE*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
